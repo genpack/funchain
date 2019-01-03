@@ -130,6 +130,37 @@ FUNCTION = setRefClass('FUNCTION',
     # },
     # 
     
+    is.param = function(var){
+      var %in% names(params)
+    },
+    is.input = function(var){
+      var %in% names(inputs)
+    },
+    
+    locals = function(var){
+      #N  = sequence(length(var))
+      #ss = N %in% grep(pattern = '.', x = parameters, fixed = T)
+      tbc = sequence(length(var)) %-% grep(pattern = '.', x = var, fixed = T)
+      var[tbc] <- 'UNK' %>% paste(var[tbc], sep = '.')
+      
+      terms = var %>% strsplit(".", fixed = T)
+      
+      vars = terms %>% lapply(function(x){x[[2]]}) %>% unlist
+      funs = terms %>% lapply(function(x){x[[1]]}) %>% unlist
+      
+      # 
+      local = vars %in% c(names(inputs), names(params))
+      match = funs == name
+      spcfy = funs != 'UNK'
+      
+      error = spcfy & !local & match
+      if(sum(error) > 0){
+        stop(vars[error] %>% paste('is not a parameter or input of', name, '!') %>% paste(collapse = '\n'))
+      }
+      
+      return(var[locals & (!spcfy | match)])
+    },
+      
     get.gradients = function(wrt){
       tbc = sequence(length(wrt)) %-% grep(pattern = '.', x = wrt, fixed = T)
       wrt[tbc] <- name %>% paste(wrt[tbc], sep = '.')
@@ -202,6 +233,23 @@ FUNCTION = setRefClass('FUNCTION',
           gradients[[wrt]] <<- NULL
         }
       }
+    },
+    
+    set.param = function(parameters, values){
+      N = sequence(length(parameters))
+      s = N %in% grep(pattern = '.', x = parameters, fixed = T)
+      
+      
+      if(grep(pattern = '.', x = parameter, fixed = T) %>% is.empty) {var <- name %>% paste(parameter, sep = '.')} else {var = parameter}
+      terms = var %>% strsplit(".", fixed = T) %>% unlist
+      local = (terms[[1]] == name) & (trms[2] %in% names(params))
+      if(local){params[[terms[2]]] <<- value} else {
+        if(terms[[1]] != name){
+          reset.var(var)
+        } else {stop(terms[2] %>% paste('is not a parameter of', name, '!'))}
+      }
+      if(local)          
+
     }
   )
 )
