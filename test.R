@@ -4,41 +4,55 @@ library(gener)
 source('funclass.R')
 
 g = FUNCTION(name = 'g',
-             input = list(u = 4, v = 8), 
-             rule.value    = function(input, param){input$u^2 + input$u - 2*input$v + 1},
-             rule.gradient = function(input, param, wrt){
+             inputs = list(u = 4, v = 7), 
+             rule.output   = function(inputs, params){inputs$u^2 + inputs$u - 2*inputs$v + 1},
+             rule.gradient = function(inputs, params, wrt){
                switch(wrt,
-                      'u'  = {2*input$u + 1},
+                      'u'  = {2*inputs$u + 1},
                       'v'  = {2})
              })
 
 
 f = FUNCTION(name = 'f',
-             input = list(x = g, y = 2), param = list(p1 = 2.0))
+             inputs = list(x = g, y = 2), params = list(p1 = 2.0))
 
-f$rule.value = function(input, param){param$p1*exp(input$x) + input$y^2}
-f$rule.gradient = function(input, param, wrt){
+f$rule.output   = function(inputs, params){params$p1*exp(inputs$x) + inputs$y^2}
+f$rule.gradient = function(inputs, params, wrt){
   switch(wrt,
-         'x'  = {param$p1*exp(input$x)},
-         'y'  = {2*input$y},
-         'p1' = {exp(input$x)})
+         'x'  = {params$p1*exp(inputs$x)},
+         'y'  = {2*inputs$y},
+         'p1' = {exp(inputs$x)})
   
   # wrt %>% lapply(function(w){switch(w,
-  #                                   'x'  = {param$p1*exp(input$x)},
-  #                                   'y'  = {2*input$y},
-  #                                   'p1' = {exp(input$x)})})
+  #                                   'x'  = {params$p1*exp(inputs$x)},
+  #                                   'y'  = {2*inputs$y},
+  #                                   'p1' = {exp(inputs$x)})})
   
 }
 
 
-g$get.value()
-f$get.value()
+g$get.output()
+f$get.output()
 
 f$get.inputs()
-f$get.gradient('f.x')
-f$get.gradient('x')[['f.x']]*g$get.gradient('u')[['g.u']]
+f$get.gradients('f.x')
+f$get.gradients('x')[['f.x']]*g$get.gradients('u')[['g.u']]
 # inputs(f) <- list(x = 12, y = g)
 # f['x'] <- 12
 # f['y'] <- g
 
 f$reset()
+
+
+f$get.dependencies()
+f$get.dependencies('f.p1')
+
+
+
+f$get.output()
+f$reset.var('f.p1')
+f$values$output
+
+f$reset.var('g.u')
+f$values$output
+

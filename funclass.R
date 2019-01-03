@@ -1,71 +1,139 @@
 FUNCTION = setRefClass('FUNCTION',
   fields = list(
-    name           =  "character",
-    input.values    = "list",
-    input           = "list",
-    param           = "list", 
-    value           = "numeric",
-    gradient        = "list",
-    rule.value      = "function",
+    name            = "character",
+    values          = "list",
+    inputs          = "list",
+    params          = "list", 
+    dependencies    = "list",
+    gradients       = "list",
+    rule.output     = "function",
     rule.gradient   = "function"
   ),
   
   methods = list(
-    get.inputs = function(input_labels = names(input)){
-      input_labels %<>% intersect(names(input))
-      new_labels = input_labels %-% names(input.values)
+    get.inputs = function(labels = names(inputs)){
+      labels %<>% intersect(names(inputs))
+      new_labels = labels %-% names(values)
       for (inp in new_labels){
-        if(inherits(input[[inp]], 'numeric')){
-          input.values[[inp]] <<- input[[inp]]
-        } else if (inherits(input[[inp]], 'FUNCTION')){
-          input.values[[inp]] <<- input[[inp]]$get.value()
+        if(inherits(inputs[[inp]], 'numeric')){
+          values[[inp]] <<- inputs[[inp]]
+        } else if (inherits(inputs[[inp]], 'FUNCTION')){
+          values[[inp]] <<- inputs[[inp]]$get.output()
         } else {
-          stop("input[[" %++% inp %++% "]] must be either a numeric or an object of class FUNCTION!")
+          stop("inputs[[" %++% inp %++% "]] must be either a numeric or an object of class FUNCTION!")
         }
       }
       
-      input.values %>% list.extract(input_labels)
+      values %>% list.extract(labels)
     },
     
-    get.value = function(){
-      if(is.empty(value)){
+    get.output = function(){
+      if(is.null(values$output)){
         # find values of all inputs
         # calculate output value of the function
-        value <<- rule.value(input = get.inputs(), param = param)
+        values$output <<- rule.output(inputs = get.inputs(), params = params)
       }
-      return(value)
+      return(values$output)
+    },
+    
+    get.dependencies = function(wrt = 'output'){
+      pass = F
+      if (wrt!= 'output'){
+        if(grep(pattern = '.', x = wrt, fixed = T) %>% is.empty) {wrt <- name %>% paste(wrt, sep = '.')}
+        terms = wrt %>% strsplit(".", fixed = T) %>% unlist
+        pass  = terms[[1]] != name
+      }
+ 
+      if (is.null(dependencies[[wrt]])){
+        if(pass){
+          for(y in names(inputs)){
+            dep = get.dependencies(y)
+            if(wrt %in% dep){
+              if(inherits(inputs[[y]], 'FUNCTION')){dependencies[[wrt]] <<- c(dependencies[[wrt]], inputs[[y]]$get.dependencies())}
+            }
+          }
+        } else {
+            i0 = list(); p0 = list()
+            for (y in names(inputs)) i0[[y]] = runif(1)
+            for (y in names(params)) p0[[y]] = runif(1)
+            if(wrt == 'output'){
+              v0 = rule.output(inputs = i0, params = p0)
+            } else {
+              v0 = rule.gradient(inputs = i0, params = p0, wrt = terms[2])
+              if(is.empty(v0)){v0 = 0}
+            }
+            i1 = i0; p1 = p0
+            for (y in names(inputs)){
+              test = runif(5)
+              tval = numeric(5)
+              for (i in 1:5){
+                i1[[y]] = test[i]
+                if (wrt == 'output'){
+                  tval[i] = rule.output(inputs = i1, params = p0)
+                } else {
+                  tval[i] = rule.gradient(inputs = i1, params = p0, wrt = terms[2])
+                }
+              }
+              if(sum(tval != v0) > 0) {
+                dependencies[[wrt]] <<- c(dependencies[[wrt]], name %>% paste(y, sep = '.'))
+                if(inherits(inputs[[y]], 'FUNCTION')){dependencies[[wrt]] <<- c(dependencies[[wrt]], inputs[[y]]$get.dependencies())}
+              }  
+              i1[[y]] = i0[[y]]
+            }
+            
+            
+            for (y in names(params)){
+              test = runif(5)
+              tval = numeric(5)
+              for (i in 1:5){
+                p1[[y]] = test[i]
+                if (wrt == 'output'){
+                  tval[i] = rule.output(inputs = i0, params = p1)
+                } else {
+                  tval[i] = rule.gradient(inputs = i0, params = p1, wrt = terms[2])
+                }
+              }
+              if(sum(tval != v0) > 0) {
+                dependencies[[wrt]] <<- c(dependencies[[wrt]], name %>% paste(y, sep = '.'))
+              }  
+              p1[[y]] = p0[[y]]
+            }
+          }
+      }
+      return(dependencies[[wrt]])
     },
     
     # Computes gradient of the function with respect to a single input or paramter
-    get.gradient.single = function(wrt){
-      terms = wrt %>% strsplit(".", fixed = T)
-      
-      vars = terms %>% lapply(function(x){if(length(x) > 1){x[[2]]} else {x[[1]]}}) %>% unlist
-      funs = terms %>% lapply(function(x){if(length(x) > 1){x[[1]]} else {'@'}}) %>% unlist
-      funs[vars %in% c(names(input), names(param)) & (funs == '@')] = name
-      
-      vars[funs == name & (vars %in% c(names(input), names(param)))] -> locals
-      
-      terms = terms[[1]]
-      if((length(terms) == 1) & (wrt %in% c(names(input), names(param)))){
-        terms = c(name, terms)
-        wrt   = terms %>% collapse(sep = ".")
-      }
-      if(is.null(gradient[[wrt]])){
-        if(terms[1] == name & length(terms) > 1){
-          assert(terms[2] %in% c(names(input), names(param)), "Function " %++% terms[1] %++% " has no input or parameter named as " %++% terms[2] )
-          gradient[[wrt]] <<- rule.gradient(input = get.input(), param = param, wrt = terms[2])}
-        else {
-          get.gradient(names(input))
-          gradient[[wrt]] <<- gradient[[inp]]*input[[inp]]$get.gradient(wrt)
-        }
-      }
-    },
+    # get.gradient = function(wrt){
+    #   terms = wrt %>% strsplit(".", fixed = T)
+    #   
+    #   vars = terms %>% lapply(function(x){if(length(x) > 1){x[[2]]} else {x[[1]]}}) %>% unlist
+    #   funs = terms %>% lapply(function(x){if(length(x) > 1){x[[1]]} else {'@'}}) %>% unlist
+    #   funs[vars %in% c(names(inputs), names(params)) & (funs == '@')] = name
+    #   
+    #   vars[funs == name & (vars %in% c(names(inputs), names(params)))] -> locals
+    #   
+    #   terms = terms[[1]]
+    #   if((length(terms) == 1) & (wrt %in% c(names(inputs), names(params)))){
+    #     terms = c(name, terms)
+    #     wrt   = terms %>% collapse(sep = ".")
+    #   }
+    #   if(is.null(gradients[[wrt]])){
+    #     if(terms[1] == name & length(terms) > 1){
+    #       assert(terms[2] %in% c(names(inputs), names(params)), "Function " %++% terms[1] %++% " has no input or parameter named as " %++% terms[2] )
+    #       gradients[[wrt]] <<- rule.gradient(inputs = get.inputs(), params = params, wrt = terms[2])}
+    #     else {
+    #       get.gradients(names(inputs))
+    #       gradients[[wrt]] <<- gradients[[inp]]*inputs[[inp]]$get.gradients(wrt)
+    #     }
+    #   }
+    # },
+    # 
     
-    get.gradient = function(wrt){
+    get.gradients = function(wrt){
       tbc = sequence(length(wrt)) %-% grep(pattern = '.', x = wrt, fixed = T)
       wrt[tbc] <- name %>% paste(wrt[tbc], sep = '.')
-      newwrt = wrt %-% names(gradient)
+      newwrt = wrt %-% names(gradients)
       
       terms = newwrt %>% strsplit(".", fixed = T)
       
@@ -74,38 +142,64 @@ FUNCTION = setRefClass('FUNCTION',
 
       
       locals = vars[funs == name]
-      valids = locals %^% (names(input) %U% names(param))
+      valids = locals %^% (names(inputs) %U% names(params))
       locals = name %>% paste(locals, sep = '.')
       
       for(i in valids){
-        gradient[[name %>% paste(i, sep = '.')]] <<- rule.gradient(input = get.inputs(), param = param, wrt = i)
+        gradients[[name %>% paste(i, sep = '.')]] <<- rule.gradient(inputs = get.inputs(), params = params, wrt = i)
       }
       
       nonlocals <- newwrt %-% locals
       
       if(length(nonlocals) > 0){
-        for(i in nonlocals){gradient[[i]] <<- 0}
-        Gri = get.gradient(names(input))
-        for (j in names(input)){
-          if(inherits(input[[j]], 'FUNCTION')){
-            Grj = input[[j]]$get.gradient(nonlocals)
+        for(i in nonlocals){gradients[[i]] <<- 0}
+        Gri = get.gradients(names(inputs))
+        for (j in names(inputs)){
+          if(inherits(inputs[[j]], 'FUNCTION')){
+            Grj = inputs[[j]]$get.gradients(nonlocals)
             for (i in nonlocals){
-              gradient[[i]] <<- gradient[[i]] + Gri[[name %>% paste(j, sep = '.')]]*Grj[[i]]
+              gradients[[i]] <<- gradients[[i]] + Gri[[name %>% paste(j, sep = '.')]]*Grj[[i]]
             }
           }
         }
       }
-      gradient %>% list.extract(wrt)
+      gradients %>% list.extract(wrt)
     },
     
     reset = function(){
-      input.values <<- list()
-      gradient     <<- list()
-      value        <<- numeric()
+      values     <<- list()
+      gradients  <<- list()
+
+      for(inp in names(inputs)){
+        if(inherits(inputs[[inp]], 'FUNCTION')){
+          inputs[[inp]]$reset()
+        }
+      }
+    },
+
+    reset.var = function(var){
+      tbc = sequence(length(var)) %-% grep(pattern = '.', x = var, fixed = T)
+      var[tbc] <- name %>% paste(var[tbc], sep = '.')
       
-      for(inp in names(input)){
-        if(inherits(input[[inp]], 'FUNCTION')){
-          input[[inp]]$reset()
+      for(inp in (names(inputs) %^% get.dependencies())){
+        inpcmp = name %>% paste(inp, sep = '.')
+        if(inpcmp %in% var){
+          values[[inp]]      <<- NULL
+          values[['output']] <<- NULL
+        }
+        
+        if(inherits(inputs[[inp]], 'FUNCTION')){
+          if(sum(var %in% inputs[[inp]]$get.dependencies()) > 0){
+            values[[inp]]      <<- NULL
+            values[['output']] <<- NULL
+            inputs[[inp]]$reset.var(var)
+          }
+        }
+      }
+      
+      for(wrt in names(gradients)){
+        if(sum(var %in% get.dependencies(wrt)) > 0){
+          gradients[[wrt]] <<- NULL
         }
       }
     }
