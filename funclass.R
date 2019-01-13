@@ -137,7 +137,7 @@ FUNCTION = setRefClass('FUNCTION',
       var %in% names(inputs)
     },
     
-    locals = function(var){
+    varsplit = function(var){
       #N  = sequence(length(var))
       #ss = N %in% grep(pattern = '.', x = parameters, fixed = T)
       tbc = sequence(length(var)) %-% grep(pattern = '.', x = var, fixed = T)
@@ -158,7 +158,7 @@ FUNCTION = setRefClass('FUNCTION',
         stop(vars[error] %>% paste('is not a parameter or input of', name, '!') %>% paste(collapse = '\n'))
       }
       
-      return(var[locals & (!spcfy | match)])
+      return(list(locals = vars[locals & (!spcfy | match)], nonlocals = var[(!spcfy & !local) | (spcfy & !match)]))
     },
       
     get.gradients = function(wrt){
@@ -211,19 +211,22 @@ FUNCTION = setRefClass('FUNCTION',
     reset.var = function(var){
       tbc = sequence(length(var)) %-% grep(pattern = '.', x = var, fixed = T)
       var[tbc] <- name %>% paste(var[tbc], sep = '.')
-      
-      for(inp in (names(inputs) %^% get.dependencies())){
+      deps = get.dependencies()
+      if(sum(var %in% deps) > 0){values[['output']] <<- NULL}
+      for(inp in names(inputs)){
         inpcmp = name %>% paste(inp, sep = '.')
-        if(inpcmp %in% var){
-          values[[inp]]      <<- NULL
-          values[['output']] <<- NULL
-        }
-        
-        if(inherits(inputs[[inp]], 'FUNCTION')){
-          if(sum(var %in% inputs[[inp]]$get.dependencies()) > 0){
+        if((inpcmp) %in% deps){
+          if(inpcmp %in% var){
             values[[inp]]      <<- NULL
             values[['output']] <<- NULL
-            inputs[[inp]]$reset.var(var)
+          }
+          
+          if(inherits(inputs[[inp]], 'FUNCTION')){
+            if(sum(var %in% inputs[[inp]]$get.dependencies()) > 0){
+              values[[inp]]      <<- NULL
+              values[['output']] <<- NULL
+              inputs[[inp]]$reset.var(var)
+            }
           }
         }
       }
@@ -235,21 +238,20 @@ FUNCTION = setRefClass('FUNCTION',
       }
     },
     
-    set.param = function(parameters, values){
-      N = sequence(length(parameters))
-      s = N %in% grep(pattern = '.', x = parameters, fixed = T)
-      
-      
-      if(grep(pattern = '.', x = parameter, fixed = T) %>% is.empty) {var <- name %>% paste(parameter, sep = '.')} else {var = parameter}
-      terms = var %>% strsplit(".", fixed = T) %>% unlist
-      local = (terms[[1]] == name) & (trms[2] %in% names(params))
-      if(local){params[[terms[2]]] <<- value} else {
-        if(terms[[1]] != name){
-          reset.var(var)
-        } else {stop(terms[2] %>% paste('is not a parameter of', name, '!'))}
+    set.param = function(...){
+      vals = list(...)
+      if(length(vals) == 1 & inherits(vals[[1]], 'list')){vals = vals[[1]]}
+      if(length(vals) == 1 & inherits(vals[[1]], 'numeric')){vals = vals[[1]] %>% as.list}
+      parameters = names(vals)
+      reset.var(parameters)
+      split  = varsplit(parameters)
+      locpam = split$locals %^% names(params)
+      for(pm in locpam){params[pm] <<- vals[[pm]]}
+      for(inp in names(inputs)){
+        if(inherits(inputs[[inp]], 'FUNCTION')){
+          inputs[[inp]]$set.param(split$nonlocals)
+        }
       }
-      if(local)          
-
     }
   )
 )

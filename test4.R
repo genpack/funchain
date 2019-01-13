@@ -1,17 +1,16 @@
-# Build a simple neural net:
+# Build a simple neural net with polynomials:
 library(magrittr)
 library(gener)
 
-sigmoid = function(x) 100.0/(100.0 + exp(-x))
-sigradi = function(x) 100*exp(-x)/((100.0 + exp(-x))^2)
+sigmoid = function(x) 1.0/(1.0 + exp(-x))
+sigradi = function(x) exp(-x)/((1.0 + exp(-x))^2)
 
 x = 0.1*(-10:10)
-plot(x, sigradi(x))
 
 # Build First Layer:
 L1_1 = FUNCTION(name = 'L1_1',
-              inputs = list(x1 = x, x2 = sin(x), x3 = log(x + 20)), params = list(a0 = 0.0001, a1 = - 0.0001, a2 = - 0.0002, a3 = 0.0002), 
-              rule.output   = function(inputs, params){sigmoid(params$a0 + params$a1*inputs$x1 + params$a2*inputs$x2 + params$a3*inputs$x3)},
+              inputs = list(x1 = x, x2 = sin(x), x3 = log(x + 20)), params = list(a0 = 1, a1 = - 1, a2 = -2, a3 = 2), 
+              rule.output   = function(inputs, params){sigmoid(params$a0 + params$a1*inputs$x1 + params$a2*inputs$x1^2 + params$a3*inputs$x1^3)},
               rule.gradient = function(inputs, params, wrt){
                 u = sigradi(params$a0 + params$a1*inputs$x1 + params$a2*inputs$x2 + params$a3*inputs$x3)
                 switch(wrt,

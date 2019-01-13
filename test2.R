@@ -36,4 +36,8 @@ L1$get.output()
 
 Logit1$get.dependencies('L1.x1')
 
+Logit1$reset.var('L1.a1')
+Logit1$values
+L1$values
+
 
