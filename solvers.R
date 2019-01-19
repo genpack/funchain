@@ -36,16 +36,4 @@ findk = function(x, y, m, h, k0 = 1){
 }
 
 
-findk.2 = function(x, y, m, h){
-  logx  = log(x)
-  logy  = log((y - h)/m)
-  keep  = !is.na(logx) & !is.na(logy)
-  x     = x[keep]
-  y     = y[keep]
-  logx  = logx[keep]
-  logy  = logy[keep]
-  
-  model = lm(logy ~ logx)
-  model$coefficients['logx']
-}
 

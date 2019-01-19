@@ -1,24 +1,32 @@
 FUNCTION = setRefClass('FUNCTION',
   fields = list(
     name            = "character",
+    data            = "list",
     values          = "list",
     inputs          = "list",
     params          = "list", 
     dependencies    = "list",
     gradients       = "list",
     rule.output     = "function",
-    rule.gradient   = "function"
+    rule.gradient   = "function",
+    rows            = "integer"
   ),
   
   methods = list(
     get.inputs = function(labels = names(inputs)){
       labels %<>% intersect(names(inputs))
-      new_labels = labels %-% names(values)
+      new_labels = labels %>% setdiff(names(values))
       for (inp in new_labels){
         if(inherits(inputs[[inp]], 'numeric')){
           values[[inp]] <<- inputs[[inp]]
         } else if (inherits(inputs[[inp]], 'FUNCTION')){
           values[[inp]] <<- inputs[[inp]]$get.output()
+        } else if (inherits(inputs[[inp]], 'character')){
+          if(is.null(rows)){
+            values[[inp]] <<- dataset[, inputs[[inp]]]
+          } else {
+            values[[inp]] <<- dataset[rows, inputs[[inp]]]
+          }
         } else {
           stop("inputs[[" %++% inp %++% "]] must be either a numeric or an object of class FUNCTION!")
         }
@@ -140,7 +148,7 @@ FUNCTION = setRefClass('FUNCTION',
     varsplit = function(var){
       #N  = sequence(length(var))
       #ss = N %in% grep(pattern = '.', x = parameters, fixed = T)
-      tbc = sequence(length(var)) %-% grep(pattern = '.', x = var, fixed = T)
+      tbc = sequence(length(var)) %>% setdiff(grep(pattern = '.', x = var, fixed = T))
       var[tbc] <- 'UNK' %>% paste(var[tbc], sep = '.')
       
       terms = var %>% strsplit(".", fixed = T)
@@ -162,9 +170,9 @@ FUNCTION = setRefClass('FUNCTION',
     },
       
     get.gradients = function(wrt){
-      tbc = sequence(length(wrt)) %-% grep(pattern = '.', x = wrt, fixed = T)
+      tbc = sequence(length(wrt)) %>% setdiff(grep(pattern = '.', x = wrt, fixed = T))
       wrt[tbc] <- name %>% paste(wrt[tbc], sep = '.')
-      newwrt = wrt %-% names(gradients)
+      newwrt = wrt %>% setdiff(names(gradients))
       
       terms = newwrt %>% strsplit(".", fixed = T)
       
@@ -180,7 +188,7 @@ FUNCTION = setRefClass('FUNCTION',
         gradients[[name %>% paste(i, sep = '.')]] <<- rule.gradient(inputs = get.inputs(), params = params, wrt = i)
       }
       
-      nonlocals <- newwrt %-% locals
+      nonlocals <- newwrt %>% setdiff(locals)
       
       if(length(nonlocals) > 0){
         for(i in nonlocals){gradients[[i]] <<- 0}
@@ -209,7 +217,7 @@ FUNCTION = setRefClass('FUNCTION',
     },
 
     reset.var = function(var){
-      tbc = sequence(length(var)) %-% grep(pattern = '.', x = var, fixed = T)
+      tbc = sequence(length(var)) %>% setdiff(grep(pattern = '.', x = var, fixed = T))
       var[tbc] <- name %>% paste(var[tbc], sep = '.')
       deps = get.dependencies()
       if(sum(var %in% deps) > 0){values[['output']] <<- NULL}
