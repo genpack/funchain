@@ -25,31 +25,25 @@
 # data: Dataset by which the expert is trained after being born
 # school: Type of model used for training the expert
 # label: label variable on which the expert is trained
-build_expert = function(society, name, parents, school, label, n_sample = NULL){
+build_expert = function(society, parents, data, school, label, name = NULL){
   # select random subset from the big dataset
-  expert = new('FUNCTION', name = name, inputs = society %>% list.extract(parents))
+  expert = new('FUNCTION', inputs = society %>% list.extract(parents))
   # congrats: baby is now born! Now its time for the kid to be trained in a school:
 
   # prepare training material:   
   expert$reset()
-  if(!is.null(n_sample)){
-    expert$rows = dataset %>% nrow %>% sequence %>% sample(n_sample)
-  } else {
-    expert$rows = dataset %>% nrow %>% sequence
-  }
-  X = expert$get.inputs() %>% as.data.frame
-  y = dataset[expert$rows, label]
+  X = expert$get.inputs(data = data) %>% as.data.frame
+  y = data[, label]
   
   # train the expert and find input weights and performances: 
-  school$fit(X, y)
-  expert$params       = school$get.parameters() 
-  expert$data$weights = school$get.features.weight()    
-  expert$data$parents = school$get.features.name()    
-  expert$data$performance = school$get.performance.cv(X, y)
-  expert$data$goodfit = school$get.performance.fit(X, y)
+  expert = school$get.expert.predictor(X, y)
+  # take inputs from society
+  for(inp in names(expert$inputs)){
+    expert$inputs[[inp]] <- society[[expert$inputs[[inp]]]]
+  }
+    
+    
   
-  expert$rule.output = school$get.predictor()
-
   # if expert's performance is better than all its parents:
   nms = names(society)
   society = c(society, expert)

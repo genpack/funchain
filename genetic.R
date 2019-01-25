@@ -4,66 +4,62 @@ library(gener)
 dataset = read.csv('~/Documents/data/forex/rba/dataset.csv')
 columns = names(dataset) %>% setdiff(c('Date', 'Y', 'Y2'))
 
-
+# todo: consider a gain for each feature to avoid growing values
 flist   = data.frame(name = columns, father = NA, mother = NA, correlation = cor(dataset[, columns], dataset[,'Y']) %>% as.numeric %>% abs, safety = 0) %>% column2Rownames('name')
 
-# nf features are born by random parents:
-create_features = function(flist, nf, prefix = 'Feat'){
-  features = rownames(flist)
-  flist %>% rbind(
-    data.frame(
-      name = prefix %>% paste(nrow(flist) + sequence(nf)),
-      father = features %>% sample(nf, replace = T),
-      mother = features %>% sample(nf, replace = T),
-      correlation = NA,
-      safety = 0, stringsAsFactors = F) %>% column2Rownames('name'))
-}
-
-# immunes a subset of features to the highest safety level
-immune = function(flist, features, level, columns){
-  flist[features, 'safety'] = level
-  have_parents = which(!(features %in% columns))
-  if(length(have_parents) > 0){
-    flist %<>% immune(flist[features[have_parents], 'father'], level, columns)
-    flist %<>% immune(flist[features[have_parents], 'mother'], level, columns)
-  }
-  return(flist)
-}
-
-get_feature_value = function(flist, name, dataset){
-  if(name %in% rownames(flist)){
-    if(flist[name, 'father'] %in% names(dataset)) {father = dataset[, flist[name, 'father']]} else {father = get_feature_value(flist, flist[name, 'father'], dataset)}
-    if(flist[name, 'mother'] %in% names(dataset)) {mother = dataset[, flist[name, 'mother']]} else {mother = get_feature_value(flist, flist[name, 'mother'], dataset)}
-    return(father*mother)
-  } else {stop('Feature name is not in the list!')}
-}
-
-evaluate = function(flist, dataset, top = 400){
-  ns   = rownames(flist)
-  keep = is.na(flist$correlation) & (flist$father %in% columns) & (flist$mother %in% columns)
-  if(sum(keep) > 0){
-    flist$correlation[keep] <- cor(dataset[, flist$father[keep]]*dataset[, flist$mother[keep]], dataset[, 'Y']) %>% as.numeric %>% abs
-  }
-  keep = is.na(flist$correlation) %>% which
-
-  for(i in keep){
-    flist$correlation[i] <- cor(get_feature_value(flist, ns[i], dataset), dataset[, 'Y'])
-  }  
-  
-  high_level = max(flist$safety) + 1
-  ord = flist$correlation %>% order(decreasing = T)
-  flist %<>% immune(ns[ord[sequence(top)]], level = high_level, columns = colnames(dataset)) 
-  
-  keep = which(flist$safety == high_level)
-  return(flist[keep, ])
-}
-
 i = 0
-while(max(flist$correlation) < 0.2){
+while(max(flist$correlation) < 0.1){
   i = i + 1
-  flist = create_features(flist, 10000)
-  flist %<>% evaluate(dataset)
+  flist = createFeatures.multiplicative(flist, 1000)
+  flist %<>% evaluateFeatures.multiplicative(X = dataset[,columns], y = dataset[,'Y'])
   
   cat('Iteration: ', i, ': Best Correlation = ', 100*max(flist$correlation), ' nrow(flist) = ', nrow(flist), '\n')
 }
 
+
+
+#### make a training set from top features:
+source('~/Documents/software/R/packages/maler/R/abstract.R')
+source('~/Documents/software/R/packages/maler/R/regressors.R')
+
+
+ord = order(flist$correlation, decreasing = T)[1:100]
+flist$correlation[ord]
+train    = NULL
+features = rownames(flist)
+for(i in ord){
+  cat(i, ' ')
+  train %<>% cbind(getFeatureValue.multiplicative(flist, features[i], dataset)) 
+}
+train %<>% as.data.frame
+colnames(train) <- paste('F', ncol(train) %>% sequence, sep = '.')
+# verify correlations again:
+y = dataset[, 'Y']
+colnames(train) %>% sapply(function(x) cor(train[, x], y))
+model = new('STATS.LM')
+model$fit(train, y)
+
+model$get.performance.fit()
+
+source('~/Documents/software/R/packages/maler/R/transformers.R')
+# optimal binning?
+
+names(dataset) <- gsub(x = names(dataset), pattern = "[.]", replacement = '_')
+columns = names(dataset) %>% setdiff(c('Date', 'Y', 'Y2'))
+
+ob = SMBINNING()
+ob$fit(X = dataset[, columns], y = dataset[, 'Y2'])
+X2 = ob$predict(dataset)
+X3 = X2 %>% fastDummies::dummy_cols(names(X2)) %>% {.[, names(X2)]}
+
+X  = cbind(dataset[, columns], X3)
+
+
+# scikit.lr?
+source('~/Documents/software/R/packages/maler/R/classifiers.R')
+
+lr = SCIKIT.LR()
+columns = names(dataset) %>% setdiff(c('Date', 'Y', 'Y2'))
+
+lr$fit(X = dataset[, columns], y = dataset[, 'Y2'])
+lr$get.performance.cv(X = dataset[, columns], y = dataset[, 'Y2'])

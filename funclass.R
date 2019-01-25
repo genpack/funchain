@@ -1,32 +1,28 @@
 FUNCTION = setRefClass('FUNCTION',
   fields = list(
     name            = "character",
-    data            = "list",
+    objects         = "list",
     values          = "list",
     inputs          = "list",
     params          = "list", 
     dependencies    = "list",
     gradients       = "list",
     rule.output     = "function",
-    rule.gradient   = "function",
-    rows            = "integer"
+    rule.gradient   = "function"
   ),
   
   methods = list(
-    get.inputs = function(labels = names(inputs)){
+    # argument 'data' is used only if inputs are of character type
+    get.inputs = function(labels = names(inputs), data = NULL){
       labels %<>% intersect(names(inputs))
       new_labels = labels %>% setdiff(names(values))
       for (inp in new_labels){
         if(inherits(inputs[[inp]], 'numeric')){
           values[[inp]] <<- inputs[[inp]]
         } else if (inherits(inputs[[inp]], 'FUNCTION')){
-          values[[inp]] <<- inputs[[inp]]$get.output()
+          values[[inp]] <<- inputs[[inp]]$get.output(data = data)
         } else if (inherits(inputs[[inp]], 'character')){
-          if(is.null(rows)){
-            values[[inp]] <<- dataset[, inputs[[inp]]]
-          } else {
-            values[[inp]] <<- dataset[rows, inputs[[inp]]]
-          }
+            values[[inp]] <<- data[, inputs[[inp]]]
         } else {
           stop("inputs[[" %++% inp %++% "]] must be either a numeric or an object of class FUNCTION!")
         }
@@ -35,11 +31,11 @@ FUNCTION = setRefClass('FUNCTION',
       values %>% list.extract(labels)
     },
     
-    get.output = function(){
+    get.output = function(data = NULL){
       if(is.null(values$output)){
         # find values of all inputs
         # calculate output value of the function
-        values$output <<- rule.output(inputs = get.inputs(), params = params)
+        values$output <<- rule.output(inputs = get.inputs(data = data), params = params)
       }
       return(values$output)
     },
@@ -169,7 +165,7 @@ FUNCTION = setRefClass('FUNCTION',
       return(list(locals = vars[locals & (!spcfy | match)], nonlocals = var[(!spcfy & !local) | (spcfy & !match)]))
     },
       
-    get.gradients = function(wrt){
+    get.gradients = function(wrt, data = NULL){
       tbc = sequence(length(wrt)) %>% setdiff(grep(pattern = '.', x = wrt, fixed = T))
       wrt[tbc] <- name %>% paste(wrt[tbc], sep = '.')
       newwrt = wrt %>% setdiff(names(gradients))
@@ -185,7 +181,7 @@ FUNCTION = setRefClass('FUNCTION',
       locals = name %>% paste(locals, sep = '.')
       
       for(i in valids){
-        gradients[[name %>% paste(i, sep = '.')]] <<- rule.gradient(inputs = get.inputs(), params = params, wrt = i)
+        gradients[[name %>% paste(i, sep = '.')]] <<- rule.gradient(inputs = get.inputs(data = data), params = params, wrt = i)
       }
       
       nonlocals <- newwrt %>% setdiff(locals)
