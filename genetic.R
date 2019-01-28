@@ -1,8 +1,9 @@
 library(magrittr)
 library(gener)
 
-dataset = read.csv('~/Documents/data/forex/rba/dataset.csv')
-columns = names(dataset) %>% setdiff(c('Date', 'Y', 'Y2'))
+# dataset = read.csv('~/Documents/data/forex/rba/dataset.csv')
+# columns = names(dataset) %>% setdiff(c('Date', 'Y', 'Y2'))
+
 
 # todo: consider a gain for each feature to avoid growing values
 flist   = data.frame(name = columns, father = NA, mother = NA, correlation = cor(dataset[, columns], dataset[,'Y']) %>% as.numeric %>% abs, safety = 0) %>% column2Rownames('name')
