@@ -42,3 +42,26 @@ system.time({cs2 = I %>% sapply(function(i) chisq.test(x > x[i], y, correct = F)
 sum((cs1-cs2)^2)
 
 plot(dataset$Length[ord[I]], cs1)
+
+
+# This function, bins a numeric feature into two buckets in order to maximize the chi-squared statistics with the putput
+optBinBin = function(x, y){
+  N = length(x) %>% sequence
+  ord = order(x)
+  x   = x[ord]
+  y   = y[ord]
+  ch  = N %>% sapply(function(i) binchisq(x > x[i], y))
+  sp  = x[order(ch, decreasing = T)[1]]
+  return(as.integer(x > sp))
+}
+
+
+optBinBinDF = function(X, y){
+  X %>% apply(2, optBinBin, y)
+}
+
+# test the function:
+X = dataset[columns %>% setdiff('Sex')]
+debug(optBinBin)
+x2 = optBinBin(X[,1], y)
+X2 = optBinBinDF(X, y)
