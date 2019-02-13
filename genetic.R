@@ -9,12 +9,12 @@ library(gener)
 flist   = data.frame(name = columns, father = NA, mother = NA, correlation = cor(dataset[, columns], dataset[,'Y']) %>% as.numeric %>% abs, safety = 0) %>% column2Rownames('name')
 
 i = 0
-while(max(flist$correlation) < 0.1){
+while(max(flist$correlation, na.rm = T) < 0.15){
   i = i + 1
   flist = createFeatures.multiplicative(flist, 1000)
-  flist %<>% evaluateFeatures.multiplicative(X = dataset[,columns], y = dataset[,'Y'])
+  flist %<>% evaluateFeatures.multiplicative(X = dataset[,columns], y = dataset[,'Y'], top = 100)
   
-  cat('Iteration: ', i, ': Best Correlation = ', 100*max(flist$correlation), ' nrow(flist) = ', nrow(flist), '\n')
+  cat('Iteration:', i, ': Best Correlation = ', 100*max(flist$correlation), ' nrow(flist) = ', nrow(flist), '\n')
 }
 
 

@@ -59,7 +59,6 @@ getFeatureValue.multiplicative = function(flist, name, dataset){
 
 evaluateFeatures.multiplicative = function(flist, X, y, top = 400, cor_fun = cor){
   ns   = rownames(flist)
-  top  = min(top, length(ns) - 1)
   
   keep = is.na(flist$correlation) & (flist$father %in% columns) & (flist$mother %in% columns)
   if(sum(keep) > 0){
@@ -72,9 +71,14 @@ evaluateFeatures.multiplicative = function(flist, X, y, top = 400, cor_fun = cor
   }  
   
   high_level = max(flist$safety) + 1
+  # ord = flist$correlation %>% order(decreasing = T) %>% intersect(which(!duplicated(flist$correlation)))
   ord = flist$correlation %>% order(decreasing = T)
+  
+  top  = min(top, length(ord) - 1)
+  
   flist %<>% immune(ns[ord[sequence(top)]], level = high_level, columns = colnames(X)) 
   
+  # keep = which(flist$safety == high_level | (is.na(flist$father) & is.na(flist$mother)))
   keep = which(flist$safety == high_level)
   return(flist[keep, ])
 }
