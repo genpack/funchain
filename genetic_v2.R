@@ -19,9 +19,9 @@ sm$fit(X = dataset[, columns], y = dataset[, 'Y0'])
 bins = sm$predict(dataset)
 
 
-columns = names(dataset) %>% setdiff(c('time', 'class', 'Y0', columns))
+columns = names(bins) %>% setdiff(c('time', 'class', 'Y0'))
 
-X = dataset[, columns] %>% fastDummies::dummy_cols(columns)
+X = bins[, columns] %>% fastDummies::dummy_cols(columns)
 
 # only keep binaries:
 columns = names(X) %>% setdiff(columns)
@@ -41,15 +41,9 @@ correl = function(v1, v2){
   return(a %>% sapply(function(x) max(x, 1-x)))
 }
 
-flist  = data.frame(name = columns, father = NA, mother = NA, action = NA, correlation = correl(X[, columns], y) %>% as.numeric %>% abs, safety = 0) %>% column2Rownames('name')
 
-# nf features are born by random parents:
-i = 0
-while(max(flist$correlation) < 0.9){
-  i = i + 1
-  flist = createFeatures.logical(flist, 2000)
-  flist %<>% evaluateFeatures.logical(X, y, cor_fun = correl)
-  
-  cat('Iteration: ', i, ': Best Correlation = ', 100*max(flist$correlation), ' nrow(flist) = ', nrow(flist), '\n')
-}
+flist = optGenBinFeatComb.fit(X, y, target = 0.9, cycle_births = 1000, metric = correl, epochs = 5)
+
+
+
 
