@@ -52,7 +52,12 @@ f$get.dependencies('f.p1')
 f$get.output()
 f$reset.var('f.p1')
 f$values$output
+g$values$output
 
 f$reset.var('g.u')
 f$values$output
 
+f$get.output()
+f$reset.var('f.y')
+f$values$output
+g$values$output

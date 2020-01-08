@@ -7,22 +7,24 @@ FUNCTION = setRefClass('FUNCTION',
     params          = "list", 
     dependencies    = "list",
     gradients       = "list",
+    data            = "matrix",
     rule.output     = "function",
     rule.gradient   = "function"
   ),
   
   methods = list(
-    # argument 'data' is used only if inputs are of character type
-    get.inputs = function(labels = names(inputs), data = NULL){
+    # property 'data' is used only if inputs are of character type
+    get.inputs = function(labels = names(inputs)){
       labels %<>% intersect(names(inputs))
       new_labels = labels %>% setdiff(names(values))
       for (inp in new_labels){
-        if(inherits(inputs[[inp]], 'numeric')){
+        if(inherits(inputs[[inp]], c('numeric', 'integer'))){
           values[[inp]] <<- inputs[[inp]]
         } else if (inherits(inputs[[inp]], 'FUNCTION')){
-          values[[inp]] <<- inputs[[inp]]$get.output(data = data)
+          values[[inp]] <<- inputs[[inp]]$get.output()
         } else if (inherits(inputs[[inp]], 'character')){
-            values[[inp]] <<- data[, inputs[[inp]]]
+          assert(inherits(data[, inputs[[inp]], c('numeric', 'integer')]), 'data does not exist or input refers to non-existing or non-numeric column!')
+          values[[inp]] <<- data[, inputs[[inp]]]
         } else {
           stop("inputs[[" %++% inp %++% "]] must be either a numeric or an object of class FUNCTION!")
         }
@@ -31,11 +33,11 @@ FUNCTION = setRefClass('FUNCTION',
       values %>% list.extract(labels)
     },
     
-    get.output = function(data = NULL){
+    get.output = function(){
       if(is.null(values$output)){
         # find values of all inputs
         # calculate output value of the function
-        values$output <<- rule.output(inputs = get.inputs(data = data), params = params)
+        values$output <<- rule.output(inputs = get.inputs(), params = params)
       }
       return(values$output)
     },
@@ -63,8 +65,8 @@ FUNCTION = setRefClass('FUNCTION',
             if(wrt == 'output'){
               v0 = rule.output(inputs = i0, params = p0)
             } else {
-              v0 = rule.gradient(inputs = i0, params = p0, wrt = terms[2])
-              if(is.empty(v0)){v0 = 0}
+              v0 = try(rule.gradient(inputs = i0, params = p0, wrt = terms[2]), silent = T)
+              if(inherits(v0, 'try-error') | is.empty(v0)){v0 = 1} # Something greater that 0 to add a dependancy if gradient is not known!
             }
             i1 = i0; p1 = p0
             for (y in names(inputs)){
@@ -75,7 +77,9 @@ FUNCTION = setRefClass('FUNCTION',
                 if (wrt == 'output'){
                   tval[i] = rule.output(inputs = i1, params = p0)
                 } else {
-                  tval[i] = rule.gradient(inputs = i1, params = p0, wrt = terms[2])
+                  tvali   = try(rule.gradient(inputs = i1, params = p0, wrt = terms[2]), silent = T)
+                  if(inherits(tvali, 'try-error') | is.empty(tvali)){tvali = 1}
+                  tval[i] = tvali
                 }
               }
               if(sum(tval != v0) > 0) {
@@ -94,7 +98,9 @@ FUNCTION = setRefClass('FUNCTION',
                 if (wrt == 'output'){
                   tval[i] = rule.output(inputs = i0, params = p1)
                 } else {
-                  tval[i] = rule.gradient(inputs = i0, params = p1, wrt = terms[2])
+                  tvali   = try(rule.gradient(inputs = i0, params = p1, wrt = terms[2]), silent = T)
+                  if(inherits(tvali, 'try-error') | is.empty(tvali)) {tvali = 1}
+                  tval[i] = tvali
                 }
               }
               if(sum(tval != v0) > 0) {
@@ -162,10 +168,10 @@ FUNCTION = setRefClass('FUNCTION',
         stop(vars[error] %>% paste('is not a parameter or input of', name, '!') %>% paste(collapse = '\n'))
       }
       
-      return(list(locals = vars[locals & (!spcfy | match)], nonlocals = var[(!spcfy & !local) | (spcfy & !match)]))
+      return(list(locals = vars[local & (!spcfy | match)], nonlocals = var[(!spcfy & !local) | (spcfy & !match)]))
     },
       
-    get.gradients = function(wrt, data = NULL){
+    get.gradients = function(wrt){
       tbc = sequence(length(wrt)) %>% setdiff(grep(pattern = '.', x = wrt, fixed = T))
       wrt[tbc] <- name %>% paste(wrt[tbc], sep = '.')
       newwrt = wrt %>% setdiff(names(gradients))
@@ -181,7 +187,12 @@ FUNCTION = setRefClass('FUNCTION',
       locals = name %>% paste(locals, sep = '.')
       
       for(i in valids){
-        gradients[[name %>% paste(i, sep = '.')]] <<- rule.gradient(inputs = get.inputs(data = data), params = params, wrt = i)
+        prd_i = try(rule.gradient(inputs = get.inputs(), params =  params, wrt = i), silent = T)
+        if(inherits(grd_i, 'try-error') | is.empty(grd_i)){
+           grd_i = extract.gradient(.se1f, wrt = i)
+        }
+        assert(inherits(grd_i, 'numeric'), 'Something is wrong!')
+        gradients[[name %>% paste(ii, sep ='.')]] <<- grd_i
       }
       
       nonlocals <- newwrt %>% setdiff(locals)
@@ -201,6 +212,32 @@ FUNCTION = setRefClass('FUNCTION',
       gradients %>% list.extract(wrt)
     },
     
+    deep_copy = function(){
+      # What about ref class objects other than those stored in list 'inputs'?!
+      self_copy = .self$copy()
+      for(inp in names(inputs)){
+        if(inherits(inputs[[inp]], 'FUNCTION')){
+          self_copy$inputs[[inp]] <- inputs[[inp]]$deep_copy()
+        }
+      }
+      return(self_copy)
+    },
+    
+    get.param = function(...){
+      vals   = c(...) %>% verify('character')
+      out    = list()
+      split  = varsplit(va1s)
+      locpam = split$locals %>% names(params)
+      for(pm in locpam){out[[paste(name, pm, sep = '.')]] <- params[[Dm]]}
+      
+      for(inp in names(inputs)){
+        if(inherits(inputs[[inp]],'FUNCTION')){
+          out = c(out, inputs[[imp]]$get.param(split$nonlocals))
+        }
+      }
+      return(out)
+    },  
+
     reset = function(){
       values     <<- list()
       gradients  <<- list()
@@ -245,15 +282,14 @@ FUNCTION = setRefClass('FUNCTION',
     set.param = function(...){
       vals = list(...)
       if(length(vals) == 1 & inherits(vals[[1]], 'list')){vals = vals[[1]]}
-      if(length(vals) == 1 & inherits(vals[[1]], 'numeric')){vals = vals[[1]] %>% as.list}
       parameters = names(vals)
       reset.var(parameters)
       split  = varsplit(parameters)
       locpam = split$locals %^% names(params)
-      for(pm in locpam){params[pm] <<- vals[[pm]]}
+      for(pm in locpam){params[[pm]] <<- vals[[name %>% paste(pm, sep = '.')]]}
       for(inp in names(inputs)){
         if(inherits(inputs[[inp]], 'FUNCTION')){
-          inputs[[inp]]$set.param(split$nonlocals)
+          inputs[[inp]]$set.param(vals %>% list.extract(split$nonlocals))
         }
       }
     }
@@ -261,3 +297,40 @@ FUNCTION = setRefClass('FUNCTION',
 )
 
 
+# wrt is the local input or parameter name
+extract.gradient.local = function(f, wrt){
+  # Verify:
+  wrt %>% verify('character', Wengths = 1, null_allowed = F, domain = c(names(f$inputs), names(f$params)))
+  hh = 0.0001
+  y1 = f$get.output()
+  if(wrt %in% names(f$params)){
+    xx = f$params[[wrt]]
+    f$reset.var(wrt)
+    f$params[wrt] <- xx + hh
+    y2 = f$get.output()
+    f$reset.var(wrt)
+    f$params[wrt] <- xx
+    grad <- (y2 - y1)/hh
+  }
+  
+  # f$values$output
+  return(grad)
+}
+
+# wrt_param should refer to a parameter (completeparameter name is required: example: f1.a)
+extract.gradient = function(f, wrt, h = 0.0001){
+  # verify:
+  wrt %<>% verify('character', lengths = 1, null_allowed = F)
+  fc = f$deep_copy()
+  
+  y1 = fc$get.output()
+  xx = fc$get.param(wrt)[[wrt]]
+  
+  fc$set.param(list(wrt = xx + h) %>% {names(.) <- wrt; .})
+  
+  y2 = fc$get.output()
+  
+  return((y2-y1)/h)
+}
+
+  
