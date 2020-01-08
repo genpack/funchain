@@ -23,7 +23,7 @@ FUNCTION = setRefClass('FUNCTION',
         } else if (inherits(inputs[[inp]], 'FUNCTION')){
           values[[inp]] <<- inputs[[inp]]$get.output()
         } else if (inherits(inputs[[inp]], 'character')){
-          assert(inherits(data[, inputs[[inp]], c('numeric', 'integer')]), 'data does not exist or input refers to non-existing or non-numeric column!')
+          assert(inherits(data[, inputs[[inp]]], c('numeric', 'integer')), 'data does not exist or input refers to non-existing or non-numeric column!')
           values[[inp]] <<- data[, inputs[[inp]]]
         } else {
           stop("inputs[[" %++% inp %++% "]] must be either a numeric or an object of class FUNCTION!")
