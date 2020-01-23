@@ -42,6 +42,8 @@ FUNCTION = setRefClass('FUNCTION',
       return(values$output)
     },
     
+    # if wrt == 'output' returns list of inputs and parameters to which output depends on
+    # oterwise, returns list of variables(inputs or params) to which, the gradient of the function with respect to argument wrt, depends 
     get.dependencies = function(wrt = 'output'){
       pass = F
       if (wrt!= 'output'){
@@ -113,6 +115,18 @@ FUNCTION = setRefClass('FUNCTION',
       return(dependencies[[wrt]])
     },
     
+    list.parameters = function(){
+      lst = character()
+      for(inp in names(inputs)){
+        if(inherits(inputs[[inp]], 'FUNCTION')){
+          lst %<>% c(inputs[[inp]]$list.parameters())
+        }
+      }
+      for(pm in names(params)){
+        lst %<>% c(name %>% paste(pm, sep = '.'))
+      }
+      return(lst)
+    },
     # Computes gradient of the function with respect to a single input or paramter
     # get.gradient = function(wrt){
     #   terms = wrt %>% strsplit(".", fixed = T)
@@ -187,12 +201,12 @@ FUNCTION = setRefClass('FUNCTION',
       locals = name %>% paste(locals, sep = '.')
       
       for(i in valids){
-        prd_i = try(rule.gradient(inputs = get.inputs(), params =  params, wrt = i), silent = T)
+        grd_i = try(rule.gradient(inputs = get.inputs(), params =  params, wrt = i), silent = T)
         if(inherits(grd_i, 'try-error') | is.empty(grd_i)){
            grd_i = extract.gradient(.se1f, wrt = i)
         }
         assert(inherits(grd_i, 'numeric'), 'Something is wrong!')
-        gradients[[name %>% paste(ii, sep ='.')]] <<- grd_i
+        gradients[[name %>% paste(i, sep ='.')]] <<- grd_i
       }
       
       nonlocals <- newwrt %>% setdiff(locals)
@@ -226,13 +240,13 @@ FUNCTION = setRefClass('FUNCTION',
     get.param = function(...){
       vals   = c(...) %>% verify('character')
       out    = list()
-      split  = varsplit(va1s)
-      locpam = split$locals %>% names(params)
-      for(pm in locpam){out[[paste(name, pm, sep = '.')]] <- params[[Dm]]}
+      split  = varsplit(vals)
+      locpam = split$locals %^% names(params)
+      for(pm in locpam){out[[paste(name, pm, sep = '.')]] <- params[[pm]]}
       
       for(inp in names(inputs)){
         if(inherits(inputs[[inp]],'FUNCTION')){
-          out = c(out, inputs[[imp]]$get.param(split$nonlocals))
+          out = c(out, inputs[[inp]]$get.param(split$nonlocals))
         }
       }
       return(out)
@@ -281,8 +295,18 @@ FUNCTION = setRefClass('FUNCTION',
     
     set.param = function(...){
       vals = list(...)
-      if(length(vals) == 1 & inherits(vals[[1]], 'list')){vals = vals[[1]]}
+      if(length(vals) == 1){
+        if(inherits(vals[[1]], 'list')){vals = vals[[1]]}
+        else if(inherits(vals[[1]], c('numeric', 'integer'))){
+          nss = names(vals[[1]]) 
+          if(length(nss) > 0) {
+            
+            vals = as.list(vals[[1]])
+          }
+        }  
+      }
       parameters = names(vals)
+      assert(parameters %<% f$list.parameters(), 'Unknown parameter(s): ' %++% paste(parameters, collapse = ', '))
       reset.var(parameters)
       split  = varsplit(parameters)
       locpam = split$locals %^% names(params)
@@ -297,10 +321,26 @@ FUNCTION = setRefClass('FUNCTION',
 )
 
 
+FUNCTION.AGG = setRefClass('FUNCTION.AGG', contains = 'FUNCTION', methods = list(
+  get.output.agg = function(...){
+    get.output(...) %>% sum
+  },
+  
+  get.gradients.agg = function(...){
+    out = list()
+    for(gr in names(get.gradients(...))){
+      out[[gr]] = sum(gradients[[gr]])
+    }
+    return(out)
+  }
+  
+  
+))
+
 # wrt is the local input or parameter name
 extract.gradient.local = function(f, wrt){
   # Verify:
-  wrt %>% verify('character', Wengths = 1, null_allowed = F, domain = c(names(f$inputs), names(f$params)))
+  wrt %>% verify('character', lengths = 1, null_allowed = F, domain = c(names(f$inputs), names(f$params)))
   hh = 0.0001
   y1 = f$get.output()
   if(wrt %in% names(f$params)){

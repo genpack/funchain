@@ -2,9 +2,9 @@
 # test eqSolver1d
 f = function(x) x^3 + x^2*log(x) - 165
 g = function(x) 3*x^2 + 2*x*log(x) + x
-f(5)
+f(4.9975)
 
-eqSolver1d(f,g, 125)
+eqSolver1d(f,g, 1)
 
 
 # test findk:
